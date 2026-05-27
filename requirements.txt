@@ -1,0 +1,11 @@
+kagglehub==1.0.0
+pandas
+numpy
+matplotlib
+seaborn
+plotly
+streamlit
+tqdm
+notebook
+jupyterlab
+ipywidgets
