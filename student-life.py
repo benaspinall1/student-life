@@ -224,8 +224,8 @@ def frequency_analysis(
 
 def main() -> None:
     dataset_dir = utils.get_dataset_dir()
-    folder_name = "sensing/wifi_location"
-    file_prefix = "wifi_location"
+    folder_name = "app_usage"
+    file_prefix = "running_app"
     user_ids = utils.list_users()
     extreme = "max"
     frequency_analysis(
