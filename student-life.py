@@ -224,8 +224,8 @@ def frequency_analysis(
 
 def main() -> None:
     dataset_dir = utils.get_dataset_dir()
-    folder_name = "app_usage"
-    file_prefix = "running_app"
+    folder_name = "sensing/audio"
+    file_prefix = "audio"
     user_ids = utils.list_users()
     extreme = "max"
     frequency_analysis(
