@@ -411,7 +411,7 @@ def plot_timestamp_deltas(deltas: List[float], output_path: str) -> pd.Series:
 def plot_collection_interval_histogram(
     timestamps: List[Union[int, float, str, pd.Timestamp, datetime]],
     output_path: str,
-    bins: int = 80,
+    bins: int = 1000,
     zoom_std: float = 2.0,
 ) -> pd.Series:
     """
