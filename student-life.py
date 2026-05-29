@@ -40,14 +40,12 @@ def timestamp_analysis(
         print("No timestamps found.")
         return
 
-    output_graph_path = os.path.join(os.getcwd(), f"frequency_analysis/{folder_name}/{utils.format_user_id(user_id)}.png")
-    output_delta_graph_path = os.path.join(os.getcwd(), f"frequency_analysis/{folder_name}/{utils.format_user_id(user_id)}_deltas.png")
+    output_graph_path = os.path.join(os.getcwd(), f"frequency_analysis/{folder_name}/sample_counts/{utils.format_user_id(user_id)}.png")
     output_interval_hist_path = os.path.join(
         os.getcwd(),
-        f"frequency_analysis/{folder_name}/interval_hist/{utils.format_user_id(user_id)}.png",
+        f"frequency_analysis/{folder_name}/interval_histograms/{utils.format_user_id(user_id)}.png",
     )
     os.makedirs(os.path.dirname(output_graph_path), exist_ok=True)
-    os.makedirs(os.path.dirname(output_delta_graph_path), exist_ok=True)
     os.makedirs(os.path.dirname(output_interval_hist_path), exist_ok=True)
 
     counts_by_time = utils.plot_unique_timestamp_counts(timestamps=time_steps, output_path=output_graph_path)
@@ -226,8 +224,8 @@ def frequency_analysis(
 
 def main() -> None:
     dataset_dir = utils.get_dataset_dir()
-    folder_name = "app_usage"
-    file_prefix = "running_app"
+    folder_name = "sensing/activity"
+    file_prefix = "activity"
     user_ids = utils.list_users()
     extreme = "max"
     frequency_analysis(

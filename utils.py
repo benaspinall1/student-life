@@ -411,15 +411,16 @@ def plot_timestamp_deltas(deltas: List[float], output_path: str) -> pd.Series:
 def plot_collection_interval_histogram(
     timestamps: List[Union[int, float, str, pd.Timestamp, datetime]],
     output_path: str,
-    bins: int = 1000,
     zoom_std: float = 2.0,
 ) -> pd.Series:
     """
-    Plot a histogram of collection intervals in minutes.
+    Plot the frequency of each collection interval value in minutes.
 
     Samples that share the same timestamp are treated as the same collection
     event by deduplicating timestamps before interval computation.
 
+    Interval values are rounded to 2 decimals before counting frequency so
+    tiny float differences do not dominate the chart.
     The x-axis is zoomed around the mean using mean +/- (zoom_std * std),
     clipped to non-negative values.
     """
@@ -438,11 +439,29 @@ def plot_collection_interval_histogram(
     mean_minutes = float(intervals_minutes.mean())
     std_minutes = float(intervals_minutes.std(ddof=0))
 
+    rounded_intervals = intervals_minutes.round(2)
+    interval_frequency = rounded_intervals.value_counts().sort_index()
+    if interval_frequency.empty:
+        return pd.Series(dtype="float64")
+
+    if len(interval_frequency) > 1:
+        median_step = float(pd.Series(interval_frequency.index).diff().dropna().median())
+        bar_width = max(0.01, median_step * 0.9)
+    else:
+        bar_width = 0.1
+
     plt.figure(figsize=(11, 5))
-    plt.hist(intervals_minutes, bins=bins, edgecolor="black", alpha=0.8)
-    plt.title("Data Collection Interval Histogram")
-    plt.xlabel("Interval between unique collection timestamps (minutes)")
-    plt.ylabel("Count")
+    plt.bar(
+        interval_frequency.index.to_numpy(),
+        interval_frequency.values,
+        width=bar_width,
+        edgecolor="black",
+        alpha=0.8,
+        align="center",
+    )
+    plt.title("Frequency of Consecutive Collection Intervals")
+    plt.xlabel("Time interval between consecutive data collections (minutes)")
+    plt.ylabel("Frequency")
     plt.grid(axis="y", alpha=0.3)
 
     if len(intervals_minutes) > 1:
