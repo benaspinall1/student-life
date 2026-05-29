@@ -408,6 +408,60 @@ def plot_timestamp_deltas(deltas: List[float], output_path: str) -> pd.Series:
     return delta_series
 
 
+def plot_collection_interval_histogram(
+    timestamps: List[Union[int, float, str, pd.Timestamp, datetime]],
+    output_path: str,
+    bins: int = 80,
+    zoom_std: float = 2.0,
+) -> pd.Series:
+    """
+    Plot a histogram of collection intervals in minutes.
+
+    Samples that share the same timestamp are treated as the same collection
+    event by deduplicating timestamps before interval computation.
+
+    The x-axis is zoomed around the mean using mean +/- (zoom_std * std),
+    clipped to non-negative values.
+    """
+    if not timestamps:
+        return pd.Series(dtype="float64")
+
+    unique_seconds = sorted(set(coerce_to_unix_seconds(timestamps)))
+    if len(unique_seconds) < 2:
+        return pd.Series(dtype="float64")
+
+    deltas_seconds = compute_timestamp_deltas(unique_seconds)
+    if not deltas_seconds:
+        return pd.Series(dtype="float64")
+
+    intervals_minutes = pd.Series(deltas_seconds, dtype="float64") / 60.0
+    mean_minutes = float(intervals_minutes.mean())
+    std_minutes = float(intervals_minutes.std(ddof=0))
+
+    plt.figure(figsize=(11, 5))
+    plt.hist(intervals_minutes, bins=bins, edgecolor="black", alpha=0.8)
+    plt.title("Data Collection Interval Histogram")
+    plt.xlabel("Interval between unique collection timestamps (minutes)")
+    plt.ylabel("Count")
+    plt.grid(axis="y", alpha=0.3)
+
+    if len(intervals_minutes) > 1:
+        if std_minutes > 0:
+            x_min = max(0.0, mean_minutes - zoom_std * std_minutes)
+            x_max = mean_minutes + zoom_std * std_minutes
+            if x_max > x_min:
+                plt.xlim(x_min, x_max)
+        elif mean_minutes > 0:
+            # Constant interval case: still create a useful visible window.
+            padding = max(0.1, mean_minutes * 0.1)
+            plt.xlim(max(0.0, mean_minutes - padding), mean_minutes + padding)
+
+    plt.tight_layout()
+    plt.savefig(output_path, dpi=150)
+    plt.close()
+    return intervals_minutes
+
+
 def format_columns_for_copy(title: str, columns_by_folder: Dict[str, List[str]]) -> str:
     """
     Build a copy/paste-friendly markdown block of folder columns.

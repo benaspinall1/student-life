@@ -42,8 +42,13 @@ def timestamp_analysis(
 
     output_graph_path = os.path.join(os.getcwd(), f"frequency_analysis/{folder_name}/{utils.format_user_id(user_id)}.png")
     output_delta_graph_path = os.path.join(os.getcwd(), f"frequency_analysis/{folder_name}/{utils.format_user_id(user_id)}_deltas.png")
+    output_interval_hist_path = os.path.join(
+        os.getcwd(),
+        f"frequency_analysis/{folder_name}/interval_hist/{utils.format_user_id(user_id)}.png",
+    )
     os.makedirs(os.path.dirname(output_graph_path), exist_ok=True)
     os.makedirs(os.path.dirname(output_delta_graph_path), exist_ok=True)
+    os.makedirs(os.path.dirname(output_interval_hist_path), exist_ok=True)
 
     counts_by_time = utils.plot_unique_timestamp_counts(timestamps=time_steps, output_path=output_graph_path)
 
@@ -54,6 +59,10 @@ def timestamp_analysis(
     # Compute numeric deltas for plotting, then format only for display.
     deltas = utils.compute_timestamp_deltas(counts_by_time.index.tolist())
     # utils.plot_timestamp_deltas(deltas=deltas, output_path=output_delta_graph_path)
+    utils.plot_collection_interval_histogram(
+        timestamps=time_steps,
+        output_path=output_interval_hist_path,
+    )
 
     return counts_by_time.mean(), deltas
 
@@ -217,8 +226,8 @@ def frequency_analysis(
 
 def main() -> None:
     dataset_dir = utils.get_dataset_dir()
-    folder_name = "sensing/wifi_location"
-    file_prefix = "wifi_location"
+    folder_name = "app_usage"
+    file_prefix = "running_app"
     user_ids = utils.list_users()
     extreme = "max"
     frequency_analysis(
