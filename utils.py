@@ -1,4 +1,6 @@
 import os
+import math
+import statistics
 import kagglehub
 from typing import Optional, List, Dict, Tuple, Union, Sequence
 import pandas as pd
@@ -29,6 +31,8 @@ DEFAULT_TIME_COLUMN_CANDIDATES: Tuple[str, ...] = (
     "event_time",
     "unix_time",
     "unix_timestamp",
+    "start",
+    "start_timestamp"
 )
 
 
@@ -380,38 +384,37 @@ def plot_unique_timestamp_counts(timestamps: List[float], output_path: str) -> p
     return counts_by_time
 
 
-def plot_timestamp_deltas(deltas: List[float], output_path: str) -> pd.Series:
-    """
-    Save a chart of timestamp deltas (minutes) across consecutive unique timestamps.
-    Returns the plotted delta series in minutes indexed by delta order.
-    """
-    if not deltas:
-        return pd.Series(dtype="float64")
 
-    # Inputs are second-based deltas; plot and return minutes for readability.
-    delta_series = pd.Series(deltas, index=range(1, len(deltas) + 1), dtype="float64") / 60.0
-    use_scatter = len(delta_series) > 1000
-
-    plt.figure(figsize=(12, 5))
-    if use_scatter:
-        plt.scatter(delta_series.index, delta_series.values, s=6, alpha=0.8)
+def _nice_tick_step(span: float, target_ticks: int = 10) -> float:
+    """
+    Pick a human-friendly tick spacing (1, 2, 2.5, 5 x 10^k) so that roughly
+    ``target_ticks`` ticks span the given range. A narrow (low-variance) window
+    yields a fine step; a wide window yields a coarse one.
+    """
+    if span <= 0 or not math.isfinite(span):
+        return 1.0
+    raw_step = span / max(1, target_ticks)
+    magnitude = 10.0 ** math.floor(math.log10(raw_step))
+    residual = raw_step / magnitude
+    if residual <= 1.0:
+        nice = 1.0
+    elif residual <= 2.0:
+        nice = 2.0
+    elif residual <= 2.5:
+        nice = 2.5
+    elif residual <= 5.0:
+        nice = 5.0
     else:
-        plt.plot(delta_series.index, delta_series.values, linewidth=1.2, marker="o", markersize=2)
-    plt.title("Delta Between Consecutive Unique Timestamps")
-    plt.xlabel("Delta index")
-    plt.ylabel("Delta (minutes)")
-    plt.gca().yaxis.set_major_locator(MultipleLocator(20))
-    plt.grid(alpha=0.3)
-    plt.tight_layout()
-    plt.savefig(output_path, dpi=150)
-    plt.close()
-    return delta_series
+        nice = 10.0
+    return nice * magnitude
+
 
 def plot_collection_interval_histogram(
-    timestamps: List[Union[int, float, str, pd.Timestamp, datetime]],
+    deltas: List[float],
     output_path: str,
-    bins: int = 1000,
-    zoom_std: float = 2.0,
+    bin_width_minutes: float = 1.0,
+    zoom_std: float = 1.5,
+    max_bins: int = 500000,
 ) -> pd.Series:
     """
     Plot a histogram of collection intervals in minutes.
@@ -419,45 +422,99 @@ def plot_collection_interval_histogram(
     Samples that share the same timestamp are treated as the same collection
     event by deduplicating timestamps before interval computation.
 
-    The x-axis is zoomed around the mean using mean +/- (zoom_std * std),
-    clipped to non-negative values.
+    Bins have a fixed physical width (``bin_width_minutes``) with edges aligned
+    to multiples of that width, so each bar means the same thing regardless of
+    outliers and the bars are comparable across plots.
+
+    The marked mode is the exact-value mode (``statistics.mode`` over the
+    interval values), matching the printed stats in ``student-life.py``.
+
+    The x-axis is zoomed around the mode using a window of
+    mode +/- (zoom_std * std), clipped to non-negative values. Tick spacing
+    adapts to how wide that window is, and a tick is always placed exactly on
+    the mode so it is labeled.
     """
-    if not timestamps:
+    if not deltas:
         return pd.Series(dtype="float64")
 
-    unique_seconds = sorted(set(coerce_to_unix_seconds(timestamps)))
-    if len(unique_seconds) < 2:
-        return pd.Series(dtype="float64")
-
-    deltas_seconds = compute_timestamp_deltas(unique_seconds)
-    if not deltas_seconds:
-        return pd.Series(dtype="float64")
-
-    intervals_minutes = pd.Series(deltas_seconds, dtype="float64") / 60.0
+    intervals_minutes = pd.Series(deltas, dtype="float64") / 60.0
     mean_minutes = float(intervals_minutes.mean())
     std_minutes = float(intervals_minutes.std(ddof=0))
 
-    plt.figure(figsize=(11, 5))
-    plt.hist(intervals_minutes, bins=bins, edgecolor="black", alpha=0.8)
-    plt.title("Data Collection Interval Histogram")
-    plt.xlabel("Time interval between consecutive data collections (minutes)")
-    plt.ylabel("Frequency")
-    plt.grid(axis="y", alpha=0.3)
+    # Build fixed-width bin edges aligned to multiples of bin_width_minutes so
+    # resolution is independent of the data range (outliers don't widen bins).
+    data_min = float(intervals_minutes.min())
+    data_max = float(intervals_minutes.max())
+    width = bin_width_minutes if bin_width_minutes > 0 else 1.0
+    start = math.floor(data_min / width) * width
+    span = max(width, data_max - start)
+    n_bins = max(1, int(math.ceil(span / width)))
+    if n_bins > max_bins:
+        # Guard against pathological ranges; widen bins to stay within budget.
+        width = span / max_bins
+        n_bins = max_bins
+    bin_edges = [start + i * width for i in range(n_bins + 1)]
 
+    fig, ax = plt.subplots(figsize=(11, 5))
+    counts, bin_edges, _ = ax.hist(intervals_minutes, bins=bin_edges, edgecolor="black", alpha=0.8)
+    ax.set_title("Data Collection Interval Histogram")
+    ax.set_xlabel("Time interval between consecutive data collections (minutes)")
+    ax.set_ylabel("Number of occurrences of the time delta")
+    ax.grid(axis="y", alpha=0.3)
+
+    # Use the same definition as the printed stats in student-life.py:
+    # statistics.mode over the exact interval values (the single most-frequent
+    # value). Fall back to the mean if the data is empty.
+    if len(intervals_minutes) > 0:
+        mode_minutes = float(statistics.mode(intervals_minutes))
+    else:
+        mode_minutes = mean_minutes
+
+    x_min = x_max = None
     if len(intervals_minutes) > 1:
         if std_minutes > 0:
-            x_min = max(0.0, mean_minutes - zoom_std * std_minutes)
-            x_max = mean_minutes + zoom_std * std_minutes
-            if x_max > x_min:
-                plt.xlim(x_min, x_max)
-        elif mean_minutes > 0:
+            x_min = max(0.0, mode_minutes - zoom_std * std_minutes)
+            x_max = mode_minutes + zoom_std * std_minutes
+        elif mode_minutes > 0:
             # Constant interval case: still create a useful visible window.
-            padding = max(0.1, mean_minutes * 0.1)
-            plt.xlim(max(0.0, mean_minutes - padding), mean_minutes + padding)
+            padding = max(0.1, mode_minutes * 0.1)
+            x_min = max(0.0, mode_minutes - padding)
+            x_max = mode_minutes + padding
 
-    plt.tight_layout()
-    plt.savefig(output_path, dpi=150)
-    plt.close()
+    if x_min is not None and x_max is not None and x_max > x_min:
+        ax.set_xlim(x_min, x_max)
+
+        # Adapt tick density to the visible span and anchor a tick on the mode.
+        step = _nice_tick_step(x_max - x_min, target_ticks=10)
+        if step > 0:
+            first_tick = mode_minutes - math.ceil((mode_minutes - x_min) / step) * step
+            ticks = []
+            tick = first_tick
+            tol = step * 1e-9
+            while tick <= x_max + tol:
+                if tick >= x_min - tol:
+                    ticks.append(round(tick, 10))
+                tick += step
+            if ticks:
+                ax.set_xticks(ticks)
+            ax.axvline(mode_minutes, color="tab:red", linestyle="--", linewidth=1, alpha=0.6)
+
+    # Surface the mode so the marked peak is interpretable.
+    info_text = f"mode = {mode_minutes:.2f} min"
+    ax.text(
+        0.98,
+        0.95,
+        info_text,
+        transform=ax.transAxes,
+        ha="right",
+        va="top",
+        fontsize=9,
+        bbox=dict(boxstyle="round", facecolor="white", edgecolor="0.7", alpha=0.85),
+    )
+
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=150)
+    plt.close(fig)
     return intervals_minutes
 
 

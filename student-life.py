@@ -56,9 +56,8 @@ def timestamp_analysis(
 
     # Compute numeric deltas for plotting, then format only for display.
     deltas = utils.compute_timestamp_deltas(counts_by_time.index.tolist())
-    # utils.plot_timestamp_deltas(deltas=deltas, output_path=output_delta_graph_path)
     utils.plot_collection_interval_histogram(
-        timestamps=time_steps,
+        deltas=deltas,
         output_path=output_interval_hist_path,
     )
 
@@ -199,6 +198,13 @@ def frequency_analysis(
         print(f"Mode: {(statistics.mode(all_deltas) / 60):.2f}")
         print(f"Std: {(statistics.stdev(all_deltas) / 60):.2f}")
         print(f"Var: {(statistics.variance(all_deltas) / 60):.2f}")
+
+        aggregate_hist_path = os.path.join(
+            os.getcwd(),
+            f"frequency_analysis/{folder_name}/aggregate_histogram/all_deltas.png",
+        )
+        os.makedirs(os.path.dirname(aggregate_hist_path), exist_ok=True)
+        utils.plot_collection_interval_histogram(deltas=all_deltas, output_path=aggregate_hist_path)
     else:
         print("No valid data")
 
@@ -223,18 +229,31 @@ def frequency_analysis(
 
 
 def main() -> None:
+
+    folder_to_file_prefix = {
+        "sensing/conversation": "conversation",
+        "sensing/dark": "dark",
+        "sensing/gps": "gps",
+        "sensing/phonecharge": "phonecharge",
+        "sensing/phonelock": "phonelock",
+        "sensing/wifi": "wifi",
+        "sensing/wifi_location": "wifi_location",
+        "sms": "sms",
+
+    }
     dataset_dir = utils.get_dataset_dir()
-    folder_name = "sensing/audio"
-    file_prefix = "audio"
     user_ids = utils.list_users()
     extreme = "max"
-    frequency_analysis(
-        dataset_dir=dataset_dir,
-        folder_name=folder_name,
-        file_prefix=file_prefix,
-        user_ids=user_ids,
-        extreme=extreme,
-    )
+    for folder_name, file_prefix in folder_to_file_prefix.items():
+        print(f"Processing {folder_name}...")
+        frequency_analysis(
+            dataset_dir=dataset_dir,
+            folder_name=folder_name,
+            file_prefix=file_prefix,
+            user_ids=user_ids,
+            extreme=extreme,
+        )
+
 
 
 if __name__ == "__main__":
