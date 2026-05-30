@@ -385,6 +385,29 @@ def plot_unique_timestamp_counts(timestamps: List[float], output_path: str) -> p
 
 
 
+def compute_interval_mode_minutes(
+    deltas: List[float],
+    bin_width_minutes: float = 1.0,
+) -> Optional[float]:
+    """
+    Mode of the *binned* interval distribution, in minutes.
+
+    Returns the center of the most-populated fixed-width bin. This matches what
+    the histogram visually shows as the peak, unlike ``statistics.mode`` which
+    returns the single most-repeated exact value -- a meaningless quantity for
+    near-continuous interval data (almost every value is unique, so the "mode"
+    degenerates to an arbitrary tie-break).
+    """
+    if not deltas:
+        return None
+
+    width = bin_width_minutes if bin_width_minutes > 0 else 1.0
+    intervals_minutes = pd.Series(deltas, dtype="float64") / 60.0
+    bin_indices = (intervals_minutes / width).apply(math.floor)
+    peak_bin = bin_indices.value_counts().idxmax()
+    return (peak_bin + 0.5) * width
+
+
 def _nice_tick_step(span: float, target_ticks: int = 10) -> float:
     """
     Pick a human-friendly tick spacing (1, 2, 2.5, 5 x 10^k) so that roughly
@@ -462,13 +485,13 @@ def plot_collection_interval_histogram(
     ax.set_ylabel("Number of occurrences of the time delta")
     ax.grid(axis="y", alpha=0.3)
 
-    # Use the same definition as the printed stats in student-life.py:
-    # statistics.mode over the exact interval values (the single most-frequent
-    # value). Fall back to the mean if the data is empty.
-    if len(intervals_minutes) > 0:
-        mode_minutes = float(statistics.mode(intervals_minutes))
-    else:
-        mode_minutes = mean_minutes
+    # Mark the mode of the binned distribution (center of the tallest bar),
+    # matching the printed stats in student-life.py. statistics.mode over raw
+    # values is unusable here: intervals are near-continuous, so the most
+    # repeated exact value occurs only a handful of times and is an arbitrary
+    # tie-break rather than the visible peak.
+    binned_mode = compute_interval_mode_minutes(deltas, bin_width_minutes=width)
+    mode_minutes = binned_mode if binned_mode is not None else mean_minutes
 
     x_min = x_max = None
     if len(intervals_minutes) > 1:

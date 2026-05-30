@@ -195,7 +195,8 @@ def frequency_analysis(
         print(f"Min: {(min(all_deltas) / 60):.2f}")
         print(f"Max: {(max(all_deltas) / 60):.2f}")
         print(f"Median: {(statistics.median(all_deltas) / 60):.2f}")
-        print(f"Mode: {(statistics.mode(all_deltas) / 60):.2f}")
+        binned_mode = utils.compute_interval_mode_minutes(all_deltas)
+        print(f"Mode: {binned_mode:.2f}" if binned_mode is not None else "Mode: no valid data")
         print(f"Std: {(statistics.stdev(all_deltas) / 60):.2f}")
         print(f"Var: {(statistics.variance(all_deltas) / 60):.2f}")
 
@@ -231,14 +232,7 @@ def frequency_analysis(
 def main() -> None:
 
     folder_to_file_prefix = {
-        "sensing/conversation": "conversation",
         "sensing/dark": "dark",
-        "sensing/gps": "gps",
-        "sensing/phonecharge": "phonecharge",
-        "sensing/phonelock": "phonelock",
-        "sensing/wifi": "wifi",
-        "sensing/wifi_location": "wifi_location",
-        "sms": "sms",
 
     }
     dataset_dir = utils.get_dataset_dir()
